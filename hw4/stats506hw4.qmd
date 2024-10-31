@@ -1,0 +1,179 @@
+---
+title: "stats506hw4"
+author: "Qichang Wan"
+format:
+  html:
+    code-fold: true
+    code-summary: "Show the code"
+    embed-resources: true
+editor: visual
+---
+
+Link to github: https://github.com/Tealeaf2001/stats-506-hw4.git
+
+## Problem 1
+
+### (a)
+```{r}
+library(tidyverse)
+library(nycflights13)
+#flights
+```
+(1)departure
+```{r}
+flights %>% 
+  group_by(origin) %>% 
+  filter(n() >= 10) %>% 
+  summarise(meandelay=mean(dep_delay,na.rm = TRUE),
+            mediandelay=median(dep_delay,na.rm= TRUE)) %>% 
+  left_join(airports,by=c('origin'='faa')) %>% 
+  select(name,meandelay,mediandelay) %>% 
+  arrange(desc(meandelay))
+  
+```
+(2)arrival
+```{r}
+flights %>% 
+  group_by(dest) %>% 
+  filter(n()>=10) %>% 
+  summarise(meandelay=mean(arr_delay,na.rm = TRUE),
+            mediandelay=median(arr_delay,na.rm=TRUE)) %>% 
+  rename(faa = dest) %>%
+  left_join(airports, by = "faa") %>%
+  select(name,meandelay,mediandelay) %>% 
+  arrange(desc(meandelay)) 
+```
+### (b)
+```{r}
+flights %>% 
+  left_join(planes,by='tailnum') %>% 
+  mutate(mph=distance/(air_time/60)) %>% 
+  group_by(model) %>% 
+  summarise(avg_speedmph=mean(mph,na.rm = TRUE),
+            numflights=n()) %>% 
+  arrange(desc(avg_speedmph)) %>% 
+  slice(1)
+  
+```
+
+## Problem 2
+```{r}
+#' request the average temperature for a given month
+#' @param month month(numeric or string)
+#' @param year year(numeric)
+#' @param data data set
+#' @param celsius whether the results should be in Celsius(default False) 
+#' @param average_fn compute the mean(default mean)
+#' return average temperature
+
+get_temp <- function(month,year,data,celsius=FALSE,average_fn=mean){
+  if (month %>% is.character){
+    month <- match(tolower(month), tolower(month.name))
+    if (is.na(month)) stop("please provide a valid month name.")
+  }
+  else if(month %>% is.numeric){
+    if(month<1 |month>12){
+      stop('month should be 1-12')
+    }
+  }
+  else{
+    stop('month should be numeric or character')
+  }
+  
+  if(!year %>% is.numeric){
+    stop('year should be numeric')
+  }
+  if(year<1997|year>2000){stop('year should be 1997-2000')}
+  if(!(average_fn %>% is.function)){stop('average_fn should be a function')}
+  
+  data %>% 
+    select(temp,month_numeric,year) %>% 
+    rename(year_col=year) %>% 
+    filter(year_col == year, month_numeric == month) %>%
+    summarize(avgtemp = average_fn(temp)) %>%
+    mutate(avgtemp = ifelse(isTRUE(celsius), (avgtemp - 32)*5/9, avgtemp)) %>%
+    as.numeric -> result
+  return(result)
+  
+}
+
+nnmaps <- read_csv("chicago-nmmaps.csv")
+```
+```{r,error=TRUE}
+get_temp("Apr", 1999, data = nnmaps)
+```
+```{r,error=TRUE}
+get_temp("Apr", 1999, data = nnmaps, celsius = TRUE)
+```
+```{r,error=TRUE}
+get_temp(10, 1998, data = nnmaps, average_fn = median)
+```
+```{r,error=TRUE}
+get_temp(13, 1998, data = nnmaps)
+```
+```{r,error=TRUE}
+get_temp(2, 2005, data = nnmaps)
+```
+```{r,error=TRUE}
+get_temp("November", 1999, data =nnmaps, celsius = TRUE,
+         average_fn = function(x) {
+           x %>% sort -> x
+           x[2:(length(x) - 1)] %>% mean %>% return
+         })
+```
+
+## problem 3
+```{r}
+library(ggplot2)
+df <- read.csv('df_for_ml_improved_new_market.csv')
+```
+
+### (a)
+```{r}
+avg_price_per_year <- aggregate(price_usd ~ year, data = df, FUN = mean)
+
+ggplot(avg_price_per_year, aes(x = year, y = price_usd)) +
+  geom_line(color = "red") +
+  geom_point(color = "red") +
+  labs(title = "Average Sales Price(USD) Over Time",
+       x = "Year", y = "Average Sales Price (USD)") +
+  theme_minimal()
+```
+Yes.Overall, the price increase at first, and then decrease after 2008.
+### (b)
+```{r}
+df_genre <- reshape(df[, c("year", "Genre___Print", "Genre___Sculpture", "Genre___Painting", "Genre___Others")],
+varying = list(c("Genre___Print", "Genre___Sculpture", "Genre___Painting", "Genre___Others")),
+v.names = "Count", times = c("Print", "Sculpture", "Painting", "Others"),timevar = "Genre", direction = "long")
+
+df_genre <- df_genre[df_genre$Count >0, ]
+
+ggplot(df_genre, aes(x = year, fill = Genre)) +
+  geom_bar() +
+  labs(title = "distribution of genre of sales across years",
+       x = "Year", y = "Count of Sales") +
+  theme_minimal() +
+  theme()
+```
+Overall, the distribution didn't change much.
+### (c)
+```{r}
+df_genre_price <- reshape(df[, c("year", "price_usd", "Genre___Print", "Genre___Sculpture", "Genre___Painting", "Genre___Others")],varying = list(c("Genre___Print", "Genre___Sculpture", "Genre___Painting", "Genre___Others")),
+v.names = "is_genre", times = c("Print", "Sculpture", "Painting", "Others"),timevar = "Genre", direction = "long")
+
+df_genre_price <- df_genre_price[df_genre_price$is_genre == 1, ]
+
+avg_price_per_genre_year <- aggregate(price_usd ~ year + Genre, data = df_genre_price, FUN = mean, na.rm = TRUE)
+
+ggplot(avg_price_per_genre_year, aes(x = year, y = price_usd, color = Genre)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Effect of Genre on Sales Price Over Time",
+       x = "Year", y = "Average Sales Price (USD)") +
+  theme_minimal() +
+  theme(legend.position = "left")
+```
+The print genre is different from the other three, and the fluctuation of print price is relatively large.
+
+
+
